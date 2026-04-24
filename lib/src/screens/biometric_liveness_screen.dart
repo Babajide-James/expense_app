@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:facial_liveness_verification/facial_liveness_verification.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../state/app_scope.dart';
 import '../widgets/common_widgets.dart';
@@ -44,6 +45,19 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
 
   Future<void> _initialize() async {
     try {
+      // Request camera permission first
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error =
+              'Camera permission is required for facial verification. '
+              'Please enable it in app settings.';
+        });
+        return;
+      }
+
       _subscription = _detector.stateStream.listen(_handleState);
       await _detector.initialize();
       await _detector.start();
@@ -51,6 +65,10 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
         setState(() => _loading = false);
       }
     } catch (error) {
+      // Cancel subscription if initialization fails to prevent memory leaks
+      await _subscription?.cancel();
+      _subscription = null;
+
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -112,10 +130,26 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
     }
   }
 
-  @override
-  void dispose() {
+  void _handleRetry() {
+    _disposeCameraResources();
+    setState(() {
+      _loading = true;
+      _error = null;
+      _stateType = null;
+      _status = 'Initializing camera...';
+      _challenge = 'Position your face inside the guide';
+    });
+    _initialize();
+  }
+
+  void _disposeCameraResources() {
     _subscription?.cancel();
     _detector.dispose();
+  }
+
+  @override
+  void dispose() {
+    _disposeCameraResources();
     super.dispose();
   }
 
@@ -139,9 +173,9 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(),
-                    Colors.black.withValues(),
-                    Colors.black.withValues(),
+                    Colors.black.withOpacity(0.3),
+                    Colors.black.withOpacity(0.1),
+                    Colors.black.withOpacity(0.3),
                   ],
                 ),
               ),
@@ -202,11 +236,29 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _error ?? _challenge,
-                          style: const TextStyle(
-                            color: Color(0xFF667085),
+                          style: TextStyle(
+                            color: _error != null
+                                ? const Color(0xFFD92D20) // Red for error
+                                : const Color(0xFF667085),
                             height: 1.45,
+                            fontWeight: _error != null
+                                ? FontWeight.w600
+                                : FontWeight.w400,
                           ),
                         ),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: ElevatedButton.icon(
+                              onPressed: _handleRetry,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry Verification'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2962E8),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 14),
                         LinearProgressIndicator(
                           minHeight: 7,
