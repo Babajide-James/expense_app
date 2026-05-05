@@ -67,10 +67,18 @@
             }
 
             videoElement.srcObject = stream;
-            // Load face-api models and start detection
-            loadFaceApiModels().then(() => {
-              startFaceDetection();
-            });
+            videoElement
+              .play()
+              .then(() => {
+                console.log("Video playing, loading models...");
+                loadFaceApiModels().then(() => {
+                  console.log("Models loaded, starting detection...");
+                  startFaceDetection();
+                });
+              })
+              .catch((playError) => {
+                console.error("Video play failed", playError);
+              });
             if (window.onCameraStateChanged) {
               window.onCameraStateChanged(true);
             }
@@ -86,16 +94,36 @@
       }
 
       function stopCamera() {
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-          stream = null;
-        }
-        if (videoElement) {
-          videoElement.remove();
-          videoElement = null;
-        }
-        if (window.onCameraStateChanged) {
-          window.onCameraStateChanged(false);
+        try {
+          if (videoElement) {
+            try {
+              videoElement.pause();
+            } catch (e) {}
+            try {
+              videoElement.srcObject = null;
+            } catch (e) {}
+            try {
+              videoElement.remove();
+            } catch (e) {}
+            videoElement = null;
+          }
+
+          if (stream) {
+            try {
+              stream.getTracks().forEach((track) => {
+                try {
+                  track.stop();
+                } catch (e) {}
+              });
+            } catch (e) {}
+            stream = null;
+          }
+
+          if (window.onCameraStateChanged) {
+            window.onCameraStateChanged(false);
+          }
+        } catch (err) {
+          console.error("stopCamera error", err);
         }
       }
 
@@ -119,12 +147,60 @@
 
       async function loadFaceApiModels() {
         try {
-          await faceapi.nets.tinyFaceDetector.loadFromUri(
-            "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights/",
-          );
-          console.log("Face detection models loaded");
+          if (typeof faceapi === "undefined") {
+            console.error("faceapi library not available");
+            if (window.onCameraError)
+              window.onCameraError("Face detection library not loaded");
+            return;
+          }
+
+          // Try local /models/ first (recommended for offline/fast startup)
+          const localBase = "/models/";
+          try {
+            const head = await fetch(
+              localBase + "tiny_face_detector_model-weights_manifest.json",
+              { method: "HEAD" },
+            );
+            if (head.ok) {
+              await faceapi.nets.tinyFaceDetector.loadFromUri(localBase);
+              console.log("Face detection models loaded from local /models/");
+              return;
+            }
+          } catch (_) {
+            // local models not available, fall back to CDN
+          }
+
+          // Try known remote hosts (in order): jsDelivr GitHub, raw GitHub
+          const fallbackBases = [
+            "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/",
+            "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/",
+          ];
+
+          let loaded = false;
+          for (const base of fallbackBases) {
+            try {
+              console.log("Attempting to load models from", base);
+              await faceapi.nets.tinyFaceDetector.loadFromUri(base);
+              console.log("Face detection models loaded from", base);
+              loaded = true;
+              break;
+            } catch (err) {
+              console.warn("Failed to load models from", base, err);
+            }
+          }
+
+          if (!loaded) {
+            throw new Error(
+              "Failed to load face detection models from known hosts",
+            );
+          }
         } catch (error) {
           console.error("Failed to load face detection models", error);
+          if (window.onCameraError)
+            window.onCameraError(
+              "Failed to load face detection models: " +
+                (error?.message || error),
+            );
         }
       }
 
@@ -132,15 +208,23 @@
         if (!videoElement) return;
 
         const detectFaces = async () => {
-          if (!videoElement || videoElement.paused || videoElement.ended)
+          if (!videoElement || videoElement.paused || videoElement.ended) {
+            console.log("Video not ready for detection");
             return;
+          }
 
           try {
+            console.log("Running face detection...");
+            const options = new faceapi.TinyFaceDetectorOptions({
+              inputSize: 224,
+              scoreThreshold: 0.5,
+            });
             const detections = await faceapi.detectAllFaces(
               videoElement,
-              new faceapi.TinyFaceDetectorOptions(),
+              options,
             );
             const detected = detections.length > 0;
+            console.log("Detections:", detections.length, detected);
             if (window.onFaceDetectionStatus) {
               window.onFaceDetectionStatus(
                 JSON.stringify({
@@ -159,6 +243,25 @@
 
         detectFaces();
       }
+
+      // Ensure camera stops when user navigates away or page is hidden
+      window.addEventListener("beforeunload", () => {
+        try {
+          stopCamera();
+        } catch (e) {}
+      });
+      window.addEventListener("pagehide", () => {
+        try {
+          stopCamera();
+        } catch (e) {}
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+          try {
+            stopCamera();
+          } catch (e) {}
+        }
+      });
     </script>
     <script src="flutter_bootstrap.js" async></script>
   </body>

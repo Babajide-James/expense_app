@@ -103,8 +103,8 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
     }
   }
 
-  void _handleRetry() {
-    _disposeCameraResources();
+  Future<void> _handleRetry() async {
+    await _disposeCameraResources();
     setState(() {
       _loading = true;
       _error = null;
@@ -113,16 +113,28 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
       _challenge = 'Position your face inside the guide';
     });
     _service = createLivenessService();
-    _initialize();
+    await _initialize();
   }
 
-  void _disposeCameraResources() {
-    _subscription?.cancel();
-    _service.dispose();
+  Future<void> _disposeCameraResources() async {
+    try {
+      await _subscription?.cancel();
+    } catch (_) {}
+
+    // Stop camera (calls JS bridge on web). Don't fail if stop throws.
+    try {
+      await _service.stop();
+    } catch (_) {}
+
+    try {
+      _service.dispose();
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    // Fire-and-forget stop when the widget is disposed. _disposeCameraResources
+    // is async; we don't await here because dispose cannot be async.
     _disposeCameraResources();
     super.dispose();
   }
@@ -194,7 +206,8 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                     ),
                   ),
                   const Spacer(),
-                  Flexible(
+                  SizedBox(
+                    height: screenSize.height * 0.36,
                     child: WhiteCard(
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
