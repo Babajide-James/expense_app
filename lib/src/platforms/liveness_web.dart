@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:faceapidetectionweb/faceapidetectionweb.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'liveness_api.dart';
 
@@ -109,19 +108,8 @@ class _WebLivenessService implements LivenessService {
   @override
   Future<void> start() async {
     try {
-      final permissionStatus = await Permission.camera.request();
-      if (permissionStatus != PermissionStatus.granted) {
-        _ctrl.add(
-          LivenessState(
-            LivenessStateType.error,
-            message:
-                'Camera permission denied. Please allow camera access in your browser settings.',
-          ),
-        );
-        return;
-      }
-
-      // Initialize the bridge callbacks right before opening camera
+      // On web, the browser handles camera permission through getUserMedia.
+      // The package bridge will request access during openCamera().
       await _initializeCamera();
 
       // Add a retry mechanism for camera access

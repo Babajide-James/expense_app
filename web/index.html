@@ -31,12 +31,133 @@
 
     <title>expense_app</title>
     <link rel="manifest" href="manifest.json" />
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   </head>
   <body>
     <script>
+      let stream = null;
+      let videoElement = null;
+
       function initializeCamera() {
         console.log("JS Camera Initializing...");
-        // Your JS logic for face detection goes here
+
+        return navigator.mediaDevices
+          .getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          })
+          .then((mediaStream) => {
+            stream = mediaStream;
+
+            videoElement = document.getElementById("flutter-web-camera-video");
+            if (!videoElement) {
+              videoElement = document.createElement("video");
+              videoElement.id = "flutter-web-camera-video";
+              videoElement.autoplay = true;
+              videoElement.muted = true;
+              videoElement.playsInline = true;
+              videoElement.style.position = "fixed";
+              videoElement.style.top = "0";
+              videoElement.style.left = "0";
+              videoElement.style.width = "100%";
+              videoElement.style.height = "100%";
+              videoElement.style.objectFit = "cover";
+              videoElement.style.zIndex = "-1";
+              document.body.appendChild(videoElement);
+            }
+
+            videoElement.srcObject = stream;
+            // Load face-api models and start detection
+            loadFaceApiModels().then(() => {
+              startFaceDetection();
+            });
+            if (window.onCameraStateChanged) {
+              window.onCameraStateChanged(true);
+            }
+            return true;
+          })
+          .catch((error) => {
+            console.error("initializeCamera error", error);
+            if (window.onCameraError) {
+              window.onCameraError(error?.message || String(error));
+            }
+            return false;
+          });
+      }
+
+      function stopCamera() {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+        if (videoElement) {
+          videoElement.remove();
+          videoElement = null;
+        }
+        if (window.onCameraStateChanged) {
+          window.onCameraStateChanged(false);
+        }
+      }
+
+      function takePhoto() {
+        if (!videoElement) {
+          return;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          return;
+        }
+        context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg");
+        if (window.onPhotoTaken) {
+          window.onPhotoTaken(dataUrl, dataUrl);
+        }
+      }
+
+      async function loadFaceApiModels() {
+        try {
+          await faceapi.nets.tinyFaceDetector.loadFromUri(
+            "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights/",
+          );
+          console.log("Face detection models loaded");
+        } catch (error) {
+          console.error("Failed to load face detection models", error);
+        }
+      }
+
+      function startFaceDetection() {
+        if (!videoElement) return;
+
+        const detectFaces = async () => {
+          if (!videoElement || videoElement.paused || videoElement.ended)
+            return;
+
+          try {
+            const detections = await faceapi.detectAllFaces(
+              videoElement,
+              new faceapi.TinyFaceDetectorOptions(),
+            );
+            const detected = detections.length > 0;
+            if (window.onFaceDetectionStatus) {
+              window.onFaceDetectionStatus(
+                JSON.stringify({
+                  detected: detected,
+                  expressions: detections.map((d) => ({ score: d.score || 0 })),
+                }),
+              );
+            }
+          } catch (error) {
+            console.error("Face detection error", error);
+          }
+
+          // Continue detection every 500ms
+          setTimeout(detectFaces, 500);
+        };
+
+        detectFaces();
       }
     </script>
     <script src="flutter_bootstrap.js" async></script>
