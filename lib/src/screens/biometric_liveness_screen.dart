@@ -194,63 +194,74 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                     ),
                   ),
                   const Spacer(),
-                  WhiteCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _status,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F254B),
-                          ),
+                  Flexible(
+                    child: WhiteCard(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 16,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _error ?? _challenge,
-                          style: TextStyle(
-                            color: _error != null
-                                ? const Color(0xFFD92D20)
-                                : const Color(0xFF667085),
-                            height: 1.45,
-                            fontWeight: _error != null
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        if (_error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: ElevatedButton.icon(
-                              onPressed: _handleRetry,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry Verification'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2962E8),
-                                foregroundColor: Colors.white,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _status,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F254B),
                               ),
                             ),
-                          ),
-                        const SizedBox(height: 14),
-                        LinearProgressIndicator(
-                          minHeight: 7,
-                          value: _progressForState(_stateType),
-                          color: const Color(0xFF2962E8),
-                          backgroundColor: const Color(0xFFD9E3F3),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error ?? _challenge,
+                              style: TextStyle(
+                                color: _error != null
+                                    ? const Color(0xFFD92D20)
+                                    : const Color(0xFF667085),
+                                height: 1.45,
+                                fontWeight: _error != null
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                            if (_error != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: ElevatedButton.icon(
+                                  onPressed: _handleRetry,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Retry Verification'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2962E8),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 14),
+                            LinearProgressIndicator(
+                              minHeight: 7,
+                              value: _progressForState(_stateType),
+                              color: const Color(0xFF2962E8),
+                              backgroundColor: const Color(0xFFD9E3F3),
+                            ),
+                            const SizedBox(height: 14),
+                            if (_loading)
+                              const Text(
+                                'Preparing detector...',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              )
+                            else
+                              Text(
+                                'Current state: ${_stateType?.name ?? 'starting'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 14),
-                        if (_loading)
-                          const Text(
-                            'Preparing detector...',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          )
-                        else
-                          Text(
-                            'Current state: ${_stateType?.name ?? 'starting'}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
