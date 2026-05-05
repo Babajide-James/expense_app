@@ -92,27 +92,29 @@ class _DesktopLivenessService implements LivenessService {
       ),
     );
 
-    _detectionTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
+    _detectionTimer = Timer.periodic(Duration(milliseconds: 500), (
+      timer,
+    ) async {
       try {
         final image = await _cameraController!.takePicture();
         final bytes = await image.readAsBytes();
         final faces = await _detector!.detectFaces(bytes);
         if (faces.isNotEmpty) {
+          // Complete immediately on face detection (no delay)
           _ctrl.add(
             LivenessState(
               LivenessStateType.faceDetected,
               message: 'Face detected on desktop.',
             ),
           );
-          // Simulate completion
-          Future.delayed(Duration(seconds: 2), () {
-            _ctrl.add(
-              LivenessState(
-                LivenessStateType.completed,
-                message: 'Liveness verification completed on desktop.',
-              ),
-            );
-          });
+          // Stop detection and mark as completed
+          timer.cancel();
+          _ctrl.add(
+            LivenessState(
+              LivenessStateType.completed,
+              message: 'Liveness verification completed on desktop.',
+            ),
+          );
         } else {
           _ctrl.add(
             LivenessState(

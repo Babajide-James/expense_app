@@ -317,16 +317,11 @@ class _FaceGuidePainter extends CustomPainter {
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke;
 
-    final target = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: size.width * 0.85,
-      height: size.height * 0.82,
-    );
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.42;
 
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(target, const Radius.circular(180)),
-      guidePaint,
-    );
+    // Draw circular guide instead of rounded rectangle
+    canvas.drawCircle(center, radius, guidePaint);
 
     if (faceRect != null) {
       final scaleX = size.width / screenSize.width;
@@ -341,10 +336,11 @@ class _FaceGuidePainter extends CustomPainter {
         ..color = const Color(0xFF12B76A)
         ..strokeWidth = 3
         ..style = PaintingStyle.stroke;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(mapped, const Radius.circular(120)),
-        facePaint,
-      );
+      // Draw circular face detector instead of rounded rectangle
+      final faceCenter = mapped.center;
+      final faceRadius =
+          (mapped.width < mapped.height ? mapped.width : mapped.height) / 2;
+      canvas.drawCircle(faceCenter, faceRadius, facePaint);
     }
   }
 
