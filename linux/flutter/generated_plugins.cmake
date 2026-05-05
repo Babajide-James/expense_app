@@ -3,9 +3,16 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  face_detection_tflite
+  file_selector_linux
+  printing
+  syncfusion_pdfviewer_linux
+  url_launcher_linux
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_litert
+  jni
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

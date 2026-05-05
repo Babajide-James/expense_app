@@ -1,13 +1,12 @@
 import 'dart:async';
 
-import 'package:camera/camera.dart';
-import 'package:facial_liveness_verification/facial_liveness_verification.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../state/app_scope.dart';
 import '../widgets/common_widgets.dart';
 import 'verification_success_screen.dart';
+import '../platforms/liveness.dart';
+import '../platforms/liveness_api.dart';
 
 class BiometricLivenessScreen extends StatefulWidget {
   const BiometricLivenessScreen({super.key});
@@ -18,7 +17,7 @@ class BiometricLivenessScreen extends StatefulWidget {
 }
 
 class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
-  late final LivenessDetector _detector;
+  late LivenessService _service;
   StreamSubscription<LivenessState>? _subscription;
   LivenessStateType? _stateType;
   String _status = 'Initializing camera...';
@@ -29,43 +28,17 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
   @override
   void initState() {
     super.initState();
-    _detector = LivenessDetector(
-      const LivenessConfig(
-        challenges: [
-          ChallengeType.smile,
-          ChallengeType.blink,
-          ChallengeType.turnLeft,
-        ],
-        enableAntiSpoofing: true,
-        challengeTimeout: Duration(seconds: 15),
-      ),
-    );
+    _service = createLivenessService();
     _initialize();
   }
 
   Future<void> _initialize() async {
     try {
-      // Request camera permission first
-      final status = await Permission.camera.request();
-      if (!status.isGranted) {
-        if (!mounted) return;
-        setState(() {
-          _loading = false;
-          _error =
-              'Camera permission is required for facial verification. '
-              'Please enable it in app settings.';
-        });
-        return;
-      }
-
-      _subscription = _detector.stateStream.listen(_handleState);
-      await _detector.initialize();
-      await _detector.start();
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      _subscription = _service.onState.listen(_handleState);
+      await _service.initialize();
+      await _service.start();
+      if (mounted) setState(() => _loading = false);
     } catch (error) {
-      // Cancel subscription if initialization fails to prevent memory leaks
       await _subscription?.cancel();
       _subscription = null;
 
@@ -84,10 +57,10 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
       _stateType = state.type;
       _status = _messageForState(state);
       _challenge =
-          state.currentChallenge?.instruction ??
+          state.challenge ??
           'Keep your face steady and follow the next instruction';
       _error = state.type == LivenessStateType.error
-          ? state.error?.message ?? 'Verification failed'
+          ? state.message ?? 'Verification failed'
           : null;
     });
 
@@ -126,7 +99,7 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
       case LivenessStateType.completed:
         return 'Verification complete';
       case LivenessStateType.error:
-        return state.error?.message ?? 'Verification error';
+        return state.message ?? 'Verification error';
     }
   }
 
@@ -139,12 +112,13 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
       _status = 'Initializing camera...';
       _challenge = 'Position your face inside the guide';
     });
+    _service = createLivenessService();
     _initialize();
   }
 
   void _disposeCameraResources() {
     _subscription?.cancel();
-    _detector.dispose();
+    _service.dispose();
   }
 
   @override
@@ -157,9 +131,8 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
     final overlayRect = _buildFaceOverlayRect(context);
-    final preview = _detector.cameraController != null
-        ? CameraPreview(_detector.cameraController!)
-        : const ColoredBox(color: Colors.black);
+    final preview =
+        _service.buildPreview(context) ?? const ColoredBox(color: Colors.black);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -173,9 +146,9 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.3),
-                    Colors.black.withOpacity(0.1),
-                    Colors.black.withOpacity(0.3),
+                    Color.fromRGBO(0, 0, 0, 0.3),
+                    Color.fromRGBO(0, 0, 0, 0.1),
+                    Color.fromRGBO(0, 0, 0, 0.3),
                   ],
                 ),
               ),
@@ -238,7 +211,7 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                           _error ?? _challenge,
                           style: TextStyle(
                             color: _error != null
-                                ? const Color(0xFFD92D20) // Red for error
+                                ? const Color(0xFFD92D20)
                                 : const Color(0xFF667085),
                             height: 1.45,
                             fontWeight: _error != null
@@ -290,11 +263,11 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
   }
 
   Rect? _buildFaceOverlayRect(BuildContext context) {
-    final faceBox = _detector.faceBoundingBox;
-    final previewSize = _detector.cameraController?.value.previewSize;
+    final faceBox = _service.faceBoundingBox;
+    final previewSize = _service.previewSize;
     if (faceBox == null || previewSize == null) return null;
 
-    return CoordinateUtils.convertImageRectToScreenRect(
+    return _service.convertImageRectToScreenRect(
       faceBox,
       previewSize,
       MediaQuery.sizeOf(context),
