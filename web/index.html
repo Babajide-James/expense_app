@@ -38,6 +38,23 @@
       let stream = null;
       let videoElement = null;
 
+      // Expose a helper to query the camera permission state (where supported).
+      async function queryCameraPermission() {
+        try {
+          if (navigator.permissions && navigator.permissions.query) {
+            const status = await navigator.permissions.query({
+              name: "camera",
+            });
+            return status.state; // 'granted' | 'denied' | 'prompt'
+          }
+        } catch (e) {
+          // Some browsers don't allow querying camera permission; fall through
+        }
+        return "unknown";
+      }
+      // Attach to window for Dart to call via JS interop
+      window.queryCameraPermission = queryCameraPermission;
+
       function initializeCamera() {
         console.log("JS Camera Initializing...");
 
@@ -49,13 +66,18 @@
           .then((mediaStream) => {
             stream = mediaStream;
 
-            videoElement = document.getElementById("flutter-web-camera-video");
+            // Prefer a video element provided by Flutter (exposed as window.flutterWebCameraVideo),
+            // otherwise find an existing element in the DOM.
+            videoElement =
+              window.flutterWebCameraVideo ||
+              document.getElementById("flutter-web-camera-video");
             if (!videoElement) {
               videoElement = document.createElement("video");
               videoElement.id = "flutter-web-camera-video";
               videoElement.autoplay = true;
               videoElement.muted = true;
               videoElement.playsInline = true;
+              // keep styling minimal; Flutter will position the element when rendered via HtmlElementView
               videoElement.style.position = "fixed";
               videoElement.style.top = "0";
               videoElement.style.left = "0";
@@ -63,6 +85,7 @@
               videoElement.style.height = "100%";
               videoElement.style.objectFit = "cover";
               videoElement.style.zIndex = "-1";
+              // Only append to body when not using Flutter-provided element
               document.body.appendChild(videoElement);
             }
 
@@ -163,6 +186,9 @@
             );
             if (head.ok) {
               await faceapi.nets.tinyFaceDetector.loadFromUri(localBase);
+              try {
+                await faceapi.nets.faceExpressionNet.loadFromUri(localBase);
+              } catch (_) {}
               console.log("Face detection models loaded from local /models/");
               return;
             }
@@ -181,6 +207,11 @@
             try {
               console.log("Attempting to load models from", base);
               await faceapi.nets.tinyFaceDetector.loadFromUri(base);
+              try {
+                await faceapi.nets.faceExpressionNet.loadFromUri(base);
+              } catch (e) {
+                console.warn("Expression model not available at", base);
+              }
               console.log("Face detection models loaded from", base);
               loaded = true;
               break;
@@ -219,17 +250,21 @@
               inputSize: 224,
               scoreThreshold: 0.5,
             });
-            const detections = await faceapi.detectAllFaces(
-              videoElement,
-              options,
-            );
+            const detections = await faceapi
+              .detectAllFaces(videoElement, options)
+              .withFaceExpressions();
             const detected = detections.length > 0;
             console.log("Detections:", detections.length, detected);
+
+            const expressionsPayload = detections.map(
+              (d) => d.expressions || {},
+            );
+
             if (window.onFaceDetectionStatus) {
               window.onFaceDetectionStatus(
                 JSON.stringify({
                   detected: detected,
-                  expressions: detections.map((d) => ({ score: d.score || 0 })),
+                  expressions: expressionsPayload,
                 }),
               );
             }

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../state/app_scope.dart';
@@ -24,6 +26,7 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
   String _challenge = 'Position your face inside the guide';
   bool _loading = true;
   String? _error;
+  Uint8List? _capturedPhoto;
 
   @override
   void initState() {
@@ -62,6 +65,17 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
       _error = state.type == LivenessStateType.error
           ? state.message ?? 'Verification failed'
           : null;
+      if (state.photo != null) {
+        try {
+          final data = state.photo!;
+          // Expect data URL like: data:image/jpeg;base64,/9j/4AAQSkZJRgAB...
+          final comma = data.indexOf(',');
+          final base64Part = comma >= 0 ? data.substring(comma + 1) : data;
+          _capturedPhoto = base64Decode(base64Part);
+        } catch (_) {
+          _capturedPhoto = null;
+        }
+      }
     });
 
     if (state.type == LivenessStateType.completed) {
@@ -206,73 +220,89 @@ class _BiometricLivenessScreenState extends State<BiometricLivenessScreen> {
                     ),
                   ),
                   const Spacer(),
-                  SizedBox(
-                    height: screenSize.height * 0.36,
-                    child: WhiteCard(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 16,
-                          horizontal: 16,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _status,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF0F254B),
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240),
+                      child: WhiteCard(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 16,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _status,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F254B),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _error ?? _challenge,
-                              style: TextStyle(
-                                color: _error != null
-                                    ? const Color(0xFFD92D20)
-                                    : const Color(0xFF667085),
-                                height: 1.45,
-                                fontWeight: _error != null
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                              const SizedBox(height: 8),
+                              Text(
+                                _error ?? _challenge,
+                                style: TextStyle(
+                                  color: _error != null
+                                      ? const Color(0xFFD92D20)
+                                      : const Color(0xFF667085),
+                                  height: 1.45,
+                                  fontWeight: _error != null
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
                               ),
-                            ),
-                            if (_error != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: ElevatedButton.icon(
-                                  onPressed: _handleRetry,
-                                  icon: const Icon(Icons.refresh),
-                                  label: const Text('Retry Verification'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2962E8),
-                                    foregroundColor: Colors.white,
+                              if (_error != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: ElevatedButton.icon(
+                                    onPressed: _handleRetry,
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Retry Verification'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2962E8),
+                                      foregroundColor: Colors.white,
+                                    ),
                                   ),
                                 ),
+                              const SizedBox(height: 14),
+                              LinearProgressIndicator(
+                                minHeight: 7,
+                                value: _progressForState(_stateType),
+                                color: const Color(0xFF2962E8),
+                                backgroundColor: const Color(0xFFD9E3F3),
                               ),
-                            const SizedBox(height: 14),
-                            LinearProgressIndicator(
-                              minHeight: 7,
-                              value: _progressForState(_stateType),
-                              color: const Color(0xFF2962E8),
-                              backgroundColor: const Color(0xFFD9E3F3),
-                            ),
-                            const SizedBox(height: 14),
-                            if (_loading)
-                              const Text(
-                                'Preparing detector...',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              )
-                            else
-                              Text(
-                                'Current state: ${_stateType?.name ?? 'starting'}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(height: 14),
+                              if (_loading)
+                                const Text(
+                                  'Preparing detector...',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                )
+                              else
+                                Text(
+                                  'Current state: ${_stateType?.name ?? "starting"}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                          ],
+                              const SizedBox(height: 12),
+                              if (_capturedPhoto != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      _capturedPhoto!,
+                                      height: 120,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

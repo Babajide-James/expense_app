@@ -17,8 +17,9 @@ class LivenessState {
   final LivenessStateType type;
   final String? message;
   final String? challenge;
+  final String? photo;
 
-  LivenessState(this.type, {this.challenge, this.message});
+  LivenessState(this.type, {this.challenge, this.message, this.photo});
 }
 
 abstract class LivenessService {
