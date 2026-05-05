@@ -37,6 +37,8 @@
     <script>
       let stream = null;
       let videoElement = null;
+      let overlayCanvas = null;
+      let overlayCtx = null;
 
       // Expose a helper to query the camera permission state (where supported).
       async function queryCameraPermission() {
@@ -237,34 +239,98 @@
 
       function startFaceDetection() {
         if (!videoElement) return;
+        // Create an overlay canvas (once) aligned with the video for debug drawing
+        try {
+          if (typeof faceapi !== "undefined" && !overlayCanvas) {
+            try {
+              overlayCanvas = faceapi.createCanvasFromMedia(videoElement);
+            } catch (_) {
+              overlayCanvas = document.createElement("canvas");
+            }
+            overlayCanvas.style.position = "absolute";
+            overlayCanvas.style.top = videoElement.offsetTop + "px";
+            overlayCanvas.style.left = videoElement.offsetLeft + "px";
+            overlayCanvas.style.zIndex = "9999";
+            overlayCanvas.style.pointerEvents = "none";
+            // Append next to the video so it sits on top when rendered
+            try {
+              videoElement.parentNode.appendChild(overlayCanvas);
+            } catch (_) {
+              document.body.appendChild(overlayCanvas);
+            }
+            try {
+              overlayCtx = overlayCanvas.getContext("2d");
+            } catch (_) {
+              overlayCtx = null;
+            }
+          }
+        } catch (e) {
+          console.warn("Overlay canvas setup failed", e);
+        }
 
         const detectFaces = async () => {
           if (!videoElement || videoElement.paused || videoElement.ended) {
             console.log("Video not ready for detection");
+            // try again shortly in case video becomes ready
+            setTimeout(detectFaces, 300);
             return;
           }
 
           try {
             console.log("Running face detection...");
+            // Tune detector for better recall on small/near faces
             const options = new faceapi.TinyFaceDetectorOptions({
-              inputSize: 224,
-              scoreThreshold: 0.5,
+              inputSize: 320,
+              scoreThreshold: 0.35,
             });
+
             const detections = await faceapi
               .detectAllFaces(videoElement, options)
               .withFaceExpressions();
+
             const detected = detections.length > 0;
             console.log("Detections:", detections.length, detected);
 
+            // Draw debug overlays if possible
+            try {
+              const displaySize = {
+                width: videoElement.videoWidth || videoElement.clientWidth,
+                height: videoElement.videoHeight || videoElement.clientHeight,
+              };
+              if (overlayCanvas && typeof faceapi !== "undefined") {
+                // make sure canvas matches video display size
+                faceapi.matchDimensions(overlayCanvas, displaySize);
+                const resized = faceapi.resizeResults(detections, displaySize);
+                const ctx = overlayCanvas.getContext("2d");
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                faceapi.draw.drawDetections(overlayCanvas, resized);
+                try {
+                  faceapi.draw.drawFaceExpressions(overlayCanvas, resized);
+                } catch (_) {}
+              }
+            } catch (e) {
+              console.warn("Overlay draw failed", e);
+            }
+
+            // Prepare payloads for Dart
             const expressionsPayload = detections.map(
               (d) => d.expressions || {},
             );
+            const boxesPayload = detections.map((d) => {
+              try {
+                const b = d.detection.box;
+                return { x: b.x, y: b.y, width: b.width, height: b.height };
+              } catch (_) {
+                return null;
+              }
+            });
 
             if (window.onFaceDetectionStatus) {
               window.onFaceDetectionStatus(
                 JSON.stringify({
                   detected: detected,
                   expressions: expressionsPayload,
+                  boxes: boxesPayload,
                 }),
               );
             }
@@ -272,8 +338,8 @@
             console.error("Face detection error", error);
           }
 
-          // Continue detection every 500ms
-          setTimeout(detectFaces, 500);
+          // Continue detection every 300ms
+          setTimeout(detectFaces, 300);
         };
 
         detectFaces();
